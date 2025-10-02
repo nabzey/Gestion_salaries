@@ -109,7 +109,8 @@ const Entreprises = () => {
           fetchGlobalStats()
         ]);
         // Adapter données pour affichage (ajouter champs de démo si absents)
-        const adapted = entreprisesData.map((e) => ({
+        const entreprises = entreprisesData?.data || entreprisesData || [];
+        const adapted = entreprises.map((e) => ({
           id: e.id,
           name: e.nom,
           sector: e.sector || 'N/A',
@@ -120,7 +121,8 @@ const Entreprises = () => {
           raw: e,
         }));
         setEntreprises(adapted);
-        setStats(statsData);
+        const stats = statsData?.data || statsData || {};
+        setStats(stats);
       } catch (err) {
         setError(err.message || 'Erreur de chargement');
       } finally {

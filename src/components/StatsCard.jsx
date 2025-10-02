@@ -5,7 +5,6 @@ export default function StatsCard({ title, value, change, changeType, icon: Icon
   const colorVariants = {
     blue: 'text-blue-600',
     green: 'text-green-600',
-    purple: 'text-purple-600',
     purple: 'text-purple-600'
   };
 

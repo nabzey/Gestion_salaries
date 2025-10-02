@@ -24,7 +24,7 @@ export default function Payslips() {
       navigate('/entreprises');
       return;
     }
-    if (user && entreprise) {
+    if (user && user.dbName && entreprise) {
       loadPayslips();
     }
   }, [user, entreprise, navigate]);
@@ -36,6 +36,22 @@ export default function Payslips() {
       setPayslips(data);
     } catch (error) {
       console.error('Erreur chargement bulletins:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateMonthly = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir générer les bulletins mensuels ? Cette action créera des bulletins pour tous les employés actifs.')) return;
+
+    try {
+      setLoading(true);
+      const { generateMonthlyPayslips } = await import('../services/api');
+      await generateMonthlyPayslips();
+      await loadPayslips();
+      alert('Bulletins mensuels générés avec succès !');
+    } catch (error) {
+      alert('Erreur lors de la génération: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -94,6 +110,15 @@ export default function Payslips() {
           <h1 className="text-3xl font-bold text-gray-900">Bulletins de Paie</h1>
           <p className="text-gray-600 mt-2">Gérez et consultez tous les bulletins de paie</p>
         </div>
+        {user?.dbName && (
+          <button
+            onClick={handleGenerateMonthly}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            Générer bulletins mensuels
+          </button>
+        )}
       </div>
 
       {/* Statistiques */}

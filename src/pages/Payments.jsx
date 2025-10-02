@@ -48,7 +48,7 @@ export default function Payments() {
 
   useEffect(() => {
     async function loadData() {
-      if (!user || (user.role === 'SUPER_ADMIN' && !entreprise)) {
+      if (!user || (user.role === 'SUPER_ADMIN' && !entreprise) || !user.dbName) {
         return;
       }
       try {
@@ -84,6 +84,10 @@ export default function Payments() {
   const methods = ['all', 'ESPECES', 'VIREMENT_BANCAIRE', 'ORANGE_MONEY', 'WAVE'];
 
   const handleCreate = async () => {
+    if (!user || !user.dbName) {
+      setError('Action non autorisée pour ce type d\'utilisateur');
+      return;
+    }
     if (!form.montant || !form.payslipId) {
       setError('Montant et ID bulletin requis');
       return;
@@ -113,6 +117,10 @@ export default function Payments() {
   };
 
   const generateReceipt = async (payment) => {
+    if (!user || !user.dbName) {
+      alert('Action non autorisée pour ce type d\'utilisateur');
+      return;
+    }
     try {
       const { downloadPaymentReceipt } = await import('../services/api');
       const blob = await downloadPaymentReceipt(payment.id);

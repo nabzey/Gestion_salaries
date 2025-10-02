@@ -21,17 +21,26 @@ export default function Dashboard() {
 
   const [employees, setEmployees] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [payslips, setPayslips] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [initMessage, setInitMessage] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [globalStats, setGlobalStats] = useState(null);
 
   useEffect(() => {
     async function load() {
       if (isSuper) {
         try {
+          setLoadingCompanies(true);
           const data = await fetchEntreprises();
-          setCompanies(data);
+          setCompanies(data || []);
         } catch (error) {
           console.error('Erreur chargement entreprises:', error);
+          setCompanies([]);
+        } finally {
+          setLoadingCompanies(false);
         }
       } else {
         try {
@@ -47,9 +56,14 @@ export default function Dashboard() {
             status: e.actif ? 'Actif' : 'Inactif',
             id: e.id
           })));
-          setPayslips(payslipsData);
+          setPayslips(Array.isArray(payslipsData) ? payslipsData : []);
         } catch (error) {
           console.error('Erreur chargement données:', error);
+          setEmployees([]);
+          setPayslips([]);
+          if (error.message.includes('BD tenant non trouvée')) {
+            setInitMessage('Entreprise non initialisée. Veuillez aller à la page Entreprises et cliquer sur "Initialiser données".');
+          }
         }
       }
     }
@@ -66,9 +80,29 @@ export default function Dashboard() {
 
   return (
     <div className="overflow-hidden space-y-8">
+      {initMessage && (
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded flex items-center justify-between">
+          <span>{initMessage}</span>
+          <button
+            onClick={async () => {
+              try {
+                const { initEntreprise } = await import('../services/api');
+                await initEntreprise(entreprise?.id);
+                alert('Entreprise initialisée avec succès ! Veuillez recharger la page.');
+                window.location.reload();
+              } catch (error) {
+                alert('Erreur lors de l\'initialisation: ' + error.message);
+              }
+            }}
+            className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded"
+          >
+            Initialiser maintenant
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{isSuper ? (user?.nom || user?.email || 'Super Admin') : `Dashboard - ${entreprise?.nom || ''}`}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{isSuper ? (user?.nom || user?.email || 'Super Admin') : (entreprise?.nom || 'Dashboard')}</h1>
           {!isSuper && <p className="text-gray-500">Vue de votre entreprise</p>}
         </div>
         <div className="flex items-center gap-4">
@@ -112,7 +146,44 @@ export default function Dashboard() {
       </div>
 
       {/* Stats */}
-      {!isSuper && (
+      {isSuper ? (
+        globalStats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatsCard
+              title="Total Entreprises"
+              value={globalStats.totalEntreprises?.toString() || '0'}
+              change="+0%"
+              changeType="positive"
+              icon={Building2}
+              color="purple"
+            />
+            <StatsCard
+              title="Total Utilisateurs"
+              value={globalStats.totalUsers?.toString() || '0'}
+              change="+0%"
+              changeType="positive"
+              icon={Users}
+              color="blue"
+            />
+            <StatsCard
+              title="Total Employés"
+              value={globalStats.totalEmployees?.toString() || '0'}
+              change="+0%"
+              changeType="positive"
+              icon={Factory}
+              color="green"
+            />
+            <StatsCard
+              title="Total Bulletins"
+              value={globalStats.totalPayslips?.toString() || '0'}
+              change="+0%"
+              changeType="positive"
+              icon={DollarSign}
+              color="purple"
+            />
+          </div>
+        )
+      ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {adminStats.map((stat, index) => (
             <StatsCard key={index} {...stat} />
@@ -124,11 +195,13 @@ export default function Dashboard() {
       {isSuper ? (
         <div>
           <h2 className="text-lg font-semibold mb-4">Entreprises</h2>
-          {companies.length === 0 ? (
+          {loadingCompanies ? (
+            <div className="text-sm text-gray-500">Chargement des entreprises...</div>
+          ) : (companies || []).length === 0 ? (
             <div className="text-sm text-gray-500">Aucune entreprise</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {companies.map((c) => (
+              {(companies || []).map((c) => (
                 <div key={c.id} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
                   <div className="flex items-center mb-4">
                     <img src={c.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.nom)}&background=6a0dad&color=fff`} className="w-12 h-12 rounded mr-3" />
@@ -162,6 +235,17 @@ export default function Dashboard() {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+          {!loadingCompanies && globalStats && (
+            <div className="mt-8">
+              <ChartCard
+                title="Répartition des employés par entreprise"
+                data={(companies || []).map(c => ({
+                  name: c.nom,
+                  value: c._count?.employees || 0
+                }))}
+              />
             </div>
           )}
         </div>
@@ -198,7 +282,7 @@ export default function Dashboard() {
             <h2 className="text-lg font-semibold mb-4">Informations des employés</h2>
             <div className="space-y-4">
               {employees.map((employee, index) => {
-                const employeePayslips = payslips.filter(p => p.employeeId === employee.id);
+                const employeePayslips = (Array.isArray(payslips) ? payslips : []).filter(p => p.employeeId === employee.id);
                 const latestPayslip = employeePayslips.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
                 const totalPaid = employeePayslips.reduce((sum, p) => sum + Number(p.montant || 0), 0);
                 const remaining = latestPayslip ? Number(latestPayslip.net) - totalPaid : 0;
@@ -207,7 +291,15 @@ export default function Dashboard() {
                   <div key={index} className="border rounded-lg p-4">
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="font-medium text-lg">{employee.name}</h3>
+                        <h3
+                          className="font-medium text-lg cursor-pointer hover:text-blue-600"
+                          onClick={() => {
+                            setSelectedEmployee(employee);
+                            setShowEmployeeModal(true);
+                          }}
+                        >
+                          {employee.name}
+                        </h3>
                         <p className="text-gray-600">{employee.position}</p>
                         <p className="text-sm text-gray-500">Entreprise: {employee.company}</p>
                       </div>
@@ -282,6 +374,45 @@ export default function Dashboard() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Modal employé */}
+      {showEmployeeModal && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">Détails de l'employé</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="font-medium">Nom:</label>
+                <p>{selectedEmployee.name}</p>
+              </div>
+              <div>
+                <label className="font-medium">Poste:</label>
+                <p>{selectedEmployee.position}</p>
+              </div>
+              <div>
+                <label className="font-medium">Salaire:</label>
+                <p>{selectedEmployee.salary} XOF</p>
+              </div>
+              <div>
+                <label className="font-medium">Statut:</label>
+                <p>{selectedEmployee.status}</p>
+              </div>
+              <div>
+                <label className="font-medium">Entreprise:</label>
+                <p>{selectedEmployee.company}</p>
+              </div>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowEmployeeModal(false)}
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

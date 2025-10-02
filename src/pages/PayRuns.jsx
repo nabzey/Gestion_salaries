@@ -20,7 +20,11 @@ export default function PayRuns() {
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    if (user?.role === 'SUPER_ADMIN' && !entreprise) {
+      navigate('/entreprises');
+      return;
+    }
+    if (user && user.dbName && entreprise) {
       loadPayRuns();
     }
   }, [user, entreprise, navigate]);
@@ -32,6 +36,7 @@ export default function PayRuns() {
       setPayRuns(data);
     } catch (error) {
       console.error('Erreur chargement PayRuns:', error);
+      setPayRuns([]);
     } finally {
       setLoading(false);
     }
@@ -91,7 +96,7 @@ export default function PayRuns() {
       {loading && <div className="text-center py-8">Chargement...</div>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {payRuns.map((payRun) => {
+        {(payRuns || []).map((payRun) => {
           const StatusIcon = statusConfig[payRun.status].icon;
           const totals = getTotalAmounts(payRun.payslips || []);
 

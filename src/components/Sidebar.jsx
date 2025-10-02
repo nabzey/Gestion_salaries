@@ -1,13 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Building2, Users, Calendar, FileText, CreditCard } from 'lucide-react';
-
-import { getCurrentUser, getEntreprise } from '../services/api';
+import { Home, Users, Calendar, FileText, CreditCard } from 'lucide-react';
 
 export default function Sidebar() {
-  const user = getCurrentUser();
-  const entreprise = getEntreprise();
-  const isSuper = user?.role === 'SUPER_ADMIN';
-  const hasEntreprise = !!entreprise;
 
   const menu = [
     { to: '/dashboard', label: 'Dashboard', icon: <Home className="w-5 h-5 mr-2" /> },

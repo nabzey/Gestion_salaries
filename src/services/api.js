@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8008';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // Cache for parsed data to avoid creating new objects
 let cachedUser = null;
@@ -82,28 +82,28 @@ export function setEntreprise(entreprise) {
 export async function fetchEmployees(query = {}) {
   const params = new URLSearchParams(query);
   const res = await apiFetch(`/employees${params.toString() ? `?${params}` : ''}`);
-  return res; // employees array
+  return res.data; // employees array
 }
 
 export async function createEmployee(payload) {
   // payload: { nom, poste, typeContrat: 'FIXE'|'JOURNALIER'|'HONORAIRE', tauxSalaire, coordonneesBancaires?, actif?, entrepriseId? }
   const res = await apiFetch('/employees', { method: 'POST', body: payload });
-  return res;
+  return res.data;
 }
 
 export async function toggleEmployeeStatus(id) {
   const res = await apiFetch(`/employees/${id}/toggle`, { method: 'PATCH' });
-  return res;
+  return res.data;
 }
 
 export async function updateEmployee(id, payload) {
   const res = await apiFetch(`/employees/${id}`, { method: 'PUT', body: payload });
-  return res;
+  return res.data;
 }
 
 export async function deleteEmployee(id) {
   const res = await apiFetch(`/employees/${id}`, { method: 'DELETE' });
-  return res;
+  return res.data;
 }
 
 export function logout() {
@@ -127,9 +127,13 @@ export function getCurrentUser() {
   return cachedUser;
 }
 
-// Entreprises (Super Admin)
 export async function fetchEntreprises() {
-  const res = await apiFetch('/users/entreprises');
+  const res = await apiFetch('/entreprises');
+  return res.data;
+}
+
+export async function fetchEntrepriseStats(id) {
+  const res = await apiFetch(`/entreprises/${id}/stats`);
   return res.data;
 }
 
@@ -140,7 +144,7 @@ export async function initEntreprise(id) {
 
 export async function fetchEntrepriseUsers(id) {
   const res = await apiFetch(`/users/entreprise/${id}/utilisateurs`);
-  return res; // { admins:[], caissiers:[] }
+  return res.data; // { admins:[], caissiers:[] }
 }
 
 export async function getEntrepriseById(id) {
@@ -175,27 +179,27 @@ export async function fetchGlobalStats() {
 // Paiements
 export async function fetchPayments() {
   const res = await apiFetch('/payments');
-  return res;
+  return res.data;
 }
 
 export async function fetchPaymentsByEmployee(employeeId) {
   const res = await apiFetch(`/payments/employee/${employeeId}`);
-  return res;
+  return res.data;
 }
 
 export async function createPayment(payload) {
   const res = await apiFetch('/payments', { method: 'POST', body: payload });
-  return res;
+  return res.data;
 }
 
 export async function updatePayment(id, payload) {
   const res = await apiFetch(`/payments/${id}`, { method: 'PUT', body: payload });
-  return res;
+  return res.data;
 }
 
 export async function deletePayment(id) {
   const res = await apiFetch(`/payments/${id}`, { method: 'DELETE' });
-  return res;
+  return res.data;
 }
 
 export async function downloadPaymentReceipt(id) {
@@ -212,36 +216,52 @@ export async function downloadPaymentReceipt(id) {
 }
 
 // Bulletins de paie (pour sélection lors de paiement)
-export async function fetchPayslips() {
-  const res = await apiFetch('/payslips');
-  return res;
+export async function fetchPayslips(query = {}) {
+  const params = new URLSearchParams(query);
+  const res = await apiFetch(`/payslips${params.toString() ? `?${params}` : ''}`);
+  return res.data;
+}
+
+export async function fetchPayslipsByEmployee(employeeId) {
+  const res = await apiFetch(`/payslips/employee/${employeeId}`);
+  return res.data;
 }
 
 export async function generateMonthlyPayslips(period) {
-  const res = await apiFetch('/payslips/generate-monthly', {
+  const res = await apiFetch('/payruns', {
     method: 'POST',
     body: period ? { period } : undefined
   });
-  return res;
+  return res.data;
 }
 
 // PayRuns
 export async function fetchPayRuns() {
   const res = await apiFetch('/payruns');
-  return res;
+  return res.data;
 }
 
 export async function approvePayRun(payRunId) {
   const res = await apiFetch(`/payruns/${payRunId}/approve`, { method: 'PATCH' });
-  return res;
+  return res.data;
 }
 
 export async function closePayRun(payRunId) {
   const res = await apiFetch(`/payruns/${payRunId}/close`, { method: 'PATCH' });
-  return res;
+  return res.data;
 }
 
 // Payslips
+export async function fetchPendingPayslipsCount() {
+  const res = await apiFetch('/payslips/pending-count');
+  return res.data;
+}
+
+export async function fetchPendingPayslips() {
+  const res = await apiFetch('/payslips?status=EN_ATTENTE');
+  return res.data;
+}
+
 export async function downloadPayslipPDF(payslipId) {
   const token = getToken();
   const response = await fetch(`${API_URL}/payslips/${payslipId}/pdf`, {
@@ -252,4 +272,10 @@ export async function downloadPayslipPDF(payslipId) {
   });
   if (!response.ok) throw new Error('Erreur lors du téléchargement');
   return response.blob();
+}
+
+// Change user role (Super Admin only)
+export async function changeUserRole(userId, newRole) {
+  const res = await apiFetch('/users/change-role', { method: 'POST', body: { userId, newRole } });
+  return res.data;
 }

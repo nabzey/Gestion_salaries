@@ -10,15 +10,20 @@ import {
   Building
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { logout, getCurrentUser, getEntreprise } from '../services/api';
+import { logout, getCurrentUser, getEntreprise, changeUserRole, fetchPendingPayslipsCount, fetchPendingPayslips } from '../services/api';
 
 const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const navigate = useNavigate();
   const user = getCurrentUser();
   const entreprise = getEntreprise();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(user?.role || 'SUPER_ADMIN');
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const menuRef = useRef(null);
   const buttonRef = useRef(null);
+  const notificationsRef = useRef(null);
 
   // Fermer le menu utilisateur lors d'un clic extérieur
   useEffect(() => {
@@ -26,10 +31,36 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
       if (menuRef.current && !menuRef.current.contains(event.target) && !buttonRef.current.contains(event.target)) {
         setShowUserMenu(false);
       }
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Fetch notification count and pending payslips
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const count = await fetchPendingPayslipsCount();
+        setNotificationCount(count);
+        if (count > 0) {
+          const pendingPayslips = await fetchPendingPayslips();
+          setNotifications(pendingPayslips);
+        } else {
+          setNotifications([]);
+        }
+      } catch (error) {
+        console.error('Erreur lors de la récupération du nombre de notifications:', error);
+        setNotificationCount(0);
+        setNotifications([]);
+      }
+    };
+    if (user) {
+      fetchNotifications();
+    }
+  }, [user]);
 
   // Gestionnaire clavier pour le menu
   const handleKeyDown = (event) => {
@@ -77,15 +108,60 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
           />
           <span id="search-help" className="sr-only">Tapez pour rechercher dans l'application</span>
         </div>
-        <button
-          className="relative p-2 rounded-lg hover:bg-white/10 transition-colors text-white"
-          aria-label="Notifications"
-        >
-          <Bell className="w-6 h-6" />
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center" aria-label="3 notifications non lues">
-            3
-          </span>
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-2 rounded-lg hover:bg-white/10 transition-colors text-white"
+            aria-label="Notifications"
+          >
+            <Bell className="w-6 h-6" />
+            {notificationCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center" aria-label={`${notificationCount} notifications non lues`}>
+                {notificationCount > 99 ? '99+' : notificationCount}
+              </span>
+            )}
+          </button>
+          {showNotifications && (
+            <div
+              ref={notificationsRef}
+              className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto"
+              role="menu"
+              aria-label="Notifications"
+            >
+              <div className="py-2">
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
+                  <p className="text-xs text-gray-500">{notificationCount} bulletins en attente</p>
+                </div>
+                {notifications.length === 0 ? (
+                  <div className="px-4 py-3 text-sm text-gray-500">Aucune notification</div>
+                ) : (
+                  notifications.slice(0, 10).map((payslip) => (
+                    <div key={payslip.id} className="px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => navigate('/payslips')}>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">{payslip.employee.nom}</p>
+                          <p className="text-xs text-gray-500">Salaire: {payslip.brut} XOF</p>
+                          <p className="text-xs text-gray-500">Statut: {payslip.status}</p>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {new Date(payslip.createdAt).toLocaleDateString('fr-FR')}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {notifications.length > 10 && (
+                  <div className="px-4 py-3 text-center">
+                    <button className="text-sm text-blue-600 hover:text-blue-800" onClick={() => navigate('/payslips')}>
+                      Voir toutes les notifications
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         <div className="relative">
           <button
             ref={buttonRef}
@@ -137,6 +213,41 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
                   <Settings className="w-4 h-4" aria-hidden="true" />
                   <span>Paramètres</span>
                 </button>
+                {(user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'CAISSIER') && (
+                  <div className="px-4 py-3 border-t border-gray-100">
+                    <label htmlFor="role-select" className="block text-sm font-medium text-gray-700">Changer de rôle</label>
+                    <select
+                      id="role-select"
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                      {(user?.role === 'SUPER_ADMIN' || (user?.role === 'ADMIN' && user?.id === 1)) && <option value="SUPER_ADMIN">Super Admin</option>}
+                      <option value="ADMIN">Admin</option>
+                      <option value="CAISSIER">Caissier</option>
+                    </select>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await changeUserRole(user.id, selectedRole);
+                          localStorage.setItem('accessToken', res.data.accesToken);
+                          localStorage.setItem('user', JSON.stringify(res.data.user));
+                          if (res.data.user.entreprise) {
+                            localStorage.setItem('entreprise', JSON.stringify(res.data.user.entreprise));
+                          } else {
+                            localStorage.removeItem('entreprise');
+                          }
+                          navigate('/dashboard');
+                        } catch (error) {
+                          alert('Erreur lors du changement de rôle: ' + error.message);
+                        }
+                      }}
+                      className="mt-2 w-full bg-indigo-600 text-white px-3 py-2 rounded-md text-sm hover:bg-indigo-700"
+                    >
+                      Changer
+                    </button>
+                  </div>
+                )}
                 <hr className="my-1 border-gray-200" role="separator" />
                 <button
                   onClick={() => { logout(); navigate('/login'); }}

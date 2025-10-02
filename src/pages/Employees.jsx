@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Filter, Plus, UserCheck, UserX, Users } from 'lucide-react';
-import { fetchEmployees, getEntreprise, getCurrentUser, fetchEntreprises, createEmployee, toggleEmployeeStatus, setEntreprise } from '../services/api';
+import { Search, Filter, Plus, UserCheck, UserX, Users, FileText, Download, X } from 'lucide-react';
+import { fetchEmployees, getEntreprise, getCurrentUser, fetchEntreprises, createEmployee, toggleEmployeeStatus, setEntreprise, fetchPayslipsByEmployee, downloadPayslipPDF } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export default function Employees() {
@@ -23,7 +23,8 @@ export default function Employees() {
         setError('');
         if (currentUser?.role === 'SUPER_ADMIN') {
           // Fetch all entreprises and their employees
-          const allEntreprises = await fetchEntreprises();
+          const entreprisesResponse = await fetchEntreprises();
+          const allEntreprises = entreprisesResponse?.data || entreprisesResponse || [];
           let allEmployees = [];
           for (const ent of allEntreprises) {
             const data = await fetchEmployees({ entrepriseId: ent.id });
@@ -71,7 +72,8 @@ export default function Employees() {
       if (currentUser?.role === 'SUPER_ADMIN') {
         try {
           const fetched = await fetchEntreprises();
-          setEntreprises(fetched);
+          const entreprisesList = fetched?.data || fetched || [];
+          setEntreprises(entreprisesList);
         } catch (err) {
           console.error('Erreur lors du chargement des entreprises:', err);
         }
@@ -112,6 +114,9 @@ export default function Employees() {
     'Agent', 'Responsable RH', 'Ingénieur', 'Commercial', 'Magasinier',
   ];
   const [showAdd, setShowAdd] = useState(false);
+  const [showPayslips, setShowPayslips] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [employeePayslips, setEmployeePayslips] = useState([]);
   const [form, setForm] = useState({ nom: '', poste: '', typeContrat: 'FIXE', tauxSalaire: '', joursTravailles: '', coordonneesBancaires: '', entrepriseId: '' });
   const rateLabel = form.typeContrat === 'FIXE'
     ? 'Salaire mensuel'
@@ -138,6 +143,34 @@ export default function Employees() {
       setEmployees(adapted);
     } catch (err) {
       setError(err.message || 'Erreur lors du changement de statut');
+    }
+  };
+
+  const viewPayslips = async (employee) => {
+    try {
+      setLoading(true);
+      const payslips = await fetchPayslipsByEmployee(employee.id);
+      setSelectedEmployee(employee);
+      setEmployeePayslips(payslips);
+      setShowPayslips(true);
+    } catch (err) {
+      alert('Erreur lors du chargement des bulletins: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadPDF = async (payslipId) => {
+    try {
+      const blob = await downloadPayslipPDF(payslipId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulletin_${payslipId}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('Erreur lors du téléchargement: ' + error.message);
     }
   };
 
@@ -373,6 +406,69 @@ export default function Employees() {
         </div>
       )}
 
+      {/* Payslips Modal */}
+      {showPayslips && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Bulletins de {selectedEmployee.name}
+              </h3>
+              <button
+                onClick={() => setShowPayslips(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {employeePayslips.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun bulletin trouvé</h3>
+                  <p className="mt-1 text-sm text-gray-500">Cet employé n'a pas encore de bulletins de paie.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {employeePayslips.map((payslip) => (
+                    <div key={payslip.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900">
+                            Période: {payslip.payRun?.periode ? new Date(payslip.payRun.periode).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long' }) : 'N/A'}
+                          </h4>
+                          <p className="text-sm text-gray-500">
+                            Brut: {Number(payslip.brut).toLocaleString()} XOF |
+                            Net: {Number(payslip.net).toLocaleString()} XOF |
+                            Statut: <span className={`font-medium ${
+                              payslip.status === 'PAYE' ? 'text-green-600' :
+                              payslip.status === 'PARTIEL' ? 'text-yellow-600' : 'text-gray-600'
+                            }`}>{payslip.status}</span>
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => downloadPDF(payslip.id)}
+                          disabled={payslip.payRun?.status === 'BROUILLON'}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                            payslip.payRun?.status === 'BROUILLON'
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                          title={payslip.payRun?.status === 'BROUILLON' ? 'Cycle en brouillon - Téléchargement indisponible' : 'Télécharger PDF'}
+                        >
+                          <Download className="w-4 h-4" />
+                          Télécharger
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Employees Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading && (
@@ -431,6 +527,13 @@ export default function Employees() {
                     title={employee.status === 'Actif' ? 'Désactiver' : 'Activer'}
                   >
                     {employee.status === 'Actif' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => viewPayslips(employee)}
+                    className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-100"
+                    title="Voir bulletins"
+                  >
+                    <FileText className="w-4 h-4" />
                   </button>
                   <button className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100">
                     Éditer
