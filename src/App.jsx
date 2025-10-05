@@ -8,6 +8,8 @@ import EntrepriseDetails from './pages/EntrepriseDetails';
 import PayRuns from './pages/PayRuns';
 import Payslips from './pages/Payslips';
 import Payments from './pages/Payments';
+import Pointages from './pages/Pointages';
+import EmployeePointage from './pages/EmployeePointage';
 import Users from './pages/Users';
 import Login from './pages/Login';
 
@@ -16,6 +18,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/employee-pointage" element={<EmployeePointage />} />
         <Route
           path="/*"
           element={
@@ -29,15 +32,16 @@ function App() {
                   <Route path="/payruns" element={<PayRuns />} />
                   <Route path="/payslips" element={<Payslips />} />
                   <Route path="/payments" element={<Payments />} />
-                  <Route path="/users" element={<Users />} />
-                  <Route path="*" element={<Navigate to="/dashboard" />} />
-                </Routes>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </Router>
+                  <Route path="/pointages" element={<Pointages />} />
+                <Route path="/users" element={<Users />} />
+                <Route path="*" element={<Navigate to="/dashboard" />} />
+              </Routes>
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
+  </Router>
   )
 }
 

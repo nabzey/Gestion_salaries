@@ -16,7 +16,7 @@ export default function Payslips() {
   const [payslips, setPayslips] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('EN_ATTENTE');
   const [filterPayRun, setFilterPayRun] = useState('all');
 
   useEffect(() => {
@@ -238,7 +238,10 @@ export default function Payslips() {
                   Net
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Statut
+                  Statut Bulletin
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Statut Cycle
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -281,6 +284,19 @@ export default function Payslips() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusConfig[payslip.status].color}`}>
                       {statusConfig[payslip.status].label}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      payslip.payRun?.status === 'BROUILLON' ? 'bg-red-100 text-red-800' :
+                      payslip.payRun?.status === 'APPROUVE' ? 'bg-yellow-100 text-yellow-800' :
+                      payslip.payRun?.status === 'CLOTURE' ? 'bg-green-100 text-green-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {payslip.payRun?.status === 'BROUILLON' ? 'Brouillon' :
+                       payslip.payRun?.status === 'APPROUVE' ? 'Approuvé' :
+                       payslip.payRun?.status === 'CLOTURE' ? 'Clôturé' :
+                       'Inconnu'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">

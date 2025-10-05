@@ -18,8 +18,6 @@ function App() {
         return <div className="p-6"><h1 className="text-2xl font-bold">Employés</h1></div>;
       case 'salaires':
         return <div className="p-6"><h1 className="text-2xl font-bold">Salaires</h1></div>;
-      case 'rapports':
-        return <div className="p-6"><h1 className="text-2xl font-bold">Rapports</h1></div>;
       case 'parametres':
         return <div className="p-6"><h1 className="text-2xl font-bold">Paramètres</h1></div>;
       default:

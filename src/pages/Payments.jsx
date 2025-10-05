@@ -26,11 +26,13 @@ export default function Payments() {
   const [filterMethod, setFilterMethod] = useState('all');
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [payments, setPayments] = useState([]);
+  const [approvedPayslips, setApprovedPayslips] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [form, setForm] = useState({ montant: '', mode: 'ESPECES', payslipId: '', date: '' });
+  const [selectedPayslip, setSelectedPayslip] = useState(null);
 
   useEffect(() => {
     if (!user) {
@@ -54,12 +56,14 @@ export default function Payments() {
       try {
         setLoading(true);
         setError('');
-        const { fetchPayments, fetchEmployees } = await import('../services/api');
-        const [paymentsData, employeesData] = await Promise.all([
+        const { fetchPayments, fetchPayslips, fetchEmployees } = await import('../services/api');
+        const [paymentsData, payslipsData, employeesData] = await Promise.all([
           fetchPayments(),
+          fetchPayslips({ payRunStatus: 'APPROUVE' }), // Bulletins approuvés
           fetchEmployees()
         ]);
         setPayments(paymentsData);
+        setApprovedPayslips(payslipsData.filter(p => p.payRun?.status === 'APPROUVE'));
         setEmployees(employeesData);
       } catch (err) {
         setError(err.message || 'Erreur de chargement');
@@ -70,14 +74,23 @@ export default function Payments() {
     loadData();
   }, [user, entreprise]);
 
-  const filteredPayments = payments.filter(payment => {
-    const employeeName = payment.payslip?.employee?.nom || '';
-    const employeeId = payment.payslip?.employee?.id;
+  // Pré-remplir le montant quand un bulletin est sélectionné
+  useEffect(() => {
+    if (form.payslipId && approvedPayslips.length > 0) {
+      const payslip = approvedPayslips.find(p => p.id.toString() === form.payslipId);
+      if (payslip) {
+        setSelectedPayslip(payslip);
+        setForm(prev => ({ ...prev, montant: payslip.net.toString() }));
+      }
+    }
+  }, [form.payslipId, approvedPayslips]);
+
+  const filteredPayslips = approvedPayslips.filter(payslip => {
+    const employeeName = payslip.employee?.nom || '';
+    const employeeId = payslip.employee?.id;
     const matchesSearch = employeeName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || payment.payslip?.status === filterStatus;
-    const matchesMethod = filterMethod === 'all' || payment.mode === filterMethod;
     const matchesEmployee = filterEmployee === 'all' || employeeId == filterEmployee;
-    return matchesSearch && matchesStatus && matchesMethod && matchesEmployee;
+    return matchesSearch && matchesEmployee;
   });
 
   const statuses = ['all', 'EN_ATTENTE', 'PARTIEL', 'PAYE'];
@@ -105,10 +118,14 @@ export default function Payments() {
       await createPayment(payload);
       setShowAddModal(false);
       setForm({ montant: '', mode: 'ESPECES', payslipId: '', date: '' });
-      // Refresh
-      const { fetchPayments } = await import('../services/api');
-      const data = await fetchPayments();
-      setPayments(data);
+      // Refresh data
+      const { fetchPayments, fetchPayslips } = await import('../services/api');
+      const [paymentsData, payslipsData] = await Promise.all([
+        fetchPayments(),
+        fetchPayslips({ payRunStatus: 'APPROUVE' })
+      ]);
+      setPayments(paymentsData);
+      setApprovedPayslips(payslipsData.filter(p => p.payRun?.status === 'APPROUVE'));
     } catch (err) {
       setError(err.message || 'Erreur lors de la création');
     } finally {
@@ -140,15 +157,8 @@ export default function Payments() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-gray-900">Paiements</h1>
-          <div className="text-sm text-gray-500">({filteredPayments.length} paiements)</div>
+          <div className="text-sm text-gray-500">({filteredPayslips.length} bulletins approuvés)</div>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Nouveau paiement
-        </button>
       </div>
 
       {error && <div className="text-sm text-red-600 bg-red-50 p-4 rounded-lg">{error}</div>}
@@ -167,28 +177,6 @@ export default function Payments() {
             />
           </div>
           <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            {statuses.map(status => (
-              <option key={status} value={status}>
-                {status === 'all' ? 'Tous les statuts' : status}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filterMethod}
-            onChange={(e) => setFilterMethod(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            {methods.map(method => (
-              <option key={method} value={method}>
-                {method === 'all' ? 'Toutes les méthodes' : method.replace('_', ' ')}
-              </option>
-            ))}
-          </select>
-          <select
             value={filterEmployee}
             onChange={(e) => setFilterEmployee(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -203,51 +191,46 @@ export default function Payments() {
         </div>
       </div>
 
-      {/* Payments Table */}
+      {/* Approved Payslips Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading && <div className="p-4 text-sm text-gray-500">Chargement...</div>}
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employé</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Méthode</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut Bulletin</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Période</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant à payer</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredPayments.map((payment) => (
-              <tr key={payment.id} className="hover:bg-gray-50">
+            {filteredPayslips.map((payslip) => (
+              <tr key={payslip.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">{payment.payslip?.employee?.nom || 'N/A'}</div>
-                  <div className="text-sm text-gray-500">Bulletin: {payment.payslipId}</div>
+                  <div className="text-sm font-medium text-gray-900">{payslip.employee?.nom}</div>
+                  <div className="text-sm text-gray-500">{payslip.employee?.poste}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {payslip.payRun?.periode ? new Date(payslip.payRun.periode).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long' }) : 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                  {payment.montant} XOF
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <div className="flex items-center gap-2">
-                    <span>{methodConfig[payment.mode]}</span>
-                    {payment.mode.replace('_', ' ')}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(payment.date).toLocaleDateString('fr-FR')}
+                  {Number(payslip.net).toLocaleString()} XOF
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusConfig[payment.payslip?.status || 'EN_ATTENTE']}`}>
-                    {payment.payslip?.status || 'EN_ATTENTE'}
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusConfig[payslip.status]}`}>
+                    {payslip.status}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                   <button
-                    onClick={() => generateReceipt(payment)}
-                    className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100"
-                    title="Télécharger reçu"
+                    onClick={() => {
+                      setForm({ montant: '', mode: 'ESPECES', payslipId: payslip.id.toString(), date: '' });
+                      setShowAddModal(true);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs"
                   >
-                    <Download className="w-4 h-4" />
+                    Payer
                   </button>
                   <button className="text-gray-600 hover:text-gray-900 p-1 rounded hover:bg-gray-100">
                     Détails
@@ -257,11 +240,11 @@ export default function Payments() {
             ))}
           </tbody>
         </table>
-        {filteredPayments.length === 0 && !loading && (
+        {filteredPayslips.length === 0 && !loading && (
           <div className="text-center py-12">
             <DollarSign className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun paiement trouvé</h3>
-            <p className="mt-1 text-sm text-gray-500">Ajustez vos filtres ou ajoutez un nouveau paiement.</p>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun bulletin approuvé trouvé</h3>
+            <p className="mt-1 text-sm text-gray-500">Les bulletins apparaîtront ici une fois approuvés dans les cycles de paie.</p>
           </div>
         )}
       </div>
@@ -271,12 +254,22 @@ export default function Payments() {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Ajouter un paiement</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Effectuer un paiement</h3>
+              {selectedPayslip && (
+                <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                  <div className="text-sm text-blue-800">
+                    <strong>{selectedPayslip.employee?.nom}</strong> - {selectedPayslip.employee?.poste}
+                  </div>
+                  <div className="text-sm text-blue-600">
+                    Période: {selectedPayslip.payRun?.periode ? new Date(selectedPayslip.payRun.periode).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long' }) : 'N/A'}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="p-6 space-y-4 overflow-y-auto max-h-96">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Montant
+                  Montant à payer
                 </label>
                 <input
                   type="number"
@@ -285,6 +278,11 @@ export default function Payments() {
                   value={form.montant}
                   onChange={(e) => setForm({ ...form, montant: e.target.value })}
                 />
+                {selectedPayslip && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Montant dû: {Number(selectedPayslip.net).toLocaleString()} XOF
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -303,18 +301,6 @@ export default function Payments() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ID Bulletin de paie
-                </label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ex: 1"
-                  value={form.payslipId}
-                  onChange={(e) => setForm({ ...form, payslipId: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date (optionnel)
                 </label>
                 <input
@@ -327,7 +313,11 @@ export default function Payments() {
             </div>
             <div className="p-6 border-t border-gray-200 flex items-center justify-end space-x-3">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSelectedPayslip(null);
+                  setForm({ montant: '', mode: 'ESPECES', payslipId: '', date: '' });
+                }}
                 className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
               >
                 Annuler
@@ -337,7 +327,7 @@ export default function Payments() {
                 className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
                 disabled={loading}
               >
-                {loading ? 'Ajout...' : 'Ajouter'}
+                {loading ? 'Paiement...' : 'Effectuer le paiement'}
               </button>
             </div>
           </div>

@@ -1,82 +1,274 @@
-import React, { useEffect, useState } from 'react';
-import StatsCard from '../components/StatsCard';
-import ChartCard from '../components/ChartCard';
-import EmployeeTable from '../components/EmployeeTable';
-import { Users, DollarSign, CheckCircle, Building2, Plus, Factory } from 'lucide-react';
-import { getCurrentUser, getEntreprise, fetchEmployees, fetchEntreprises, generateMonthlyPayslips, fetchPayslips } from '../services/api';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  BarChart3,
+  CheckCircle,
+  CreditCard,
+  Users,
+  Download,
+  TrendingUp,
+  DollarSign,
+  Calendar,
+  FileText,
+  Building2,
+  Plus,
+  Factory,
+} from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
+import StatsCard from '../components/StatsCard';
+import { getCurrentUser, getEntreprise, fetchEmployees, fetchPayslips, fetchPayments, fetchPayRuns, fetchEntreprises } from '../services/api';
 
 export default function Dashboard() {
-  const user = getCurrentUser();
-  const entreprise = getEntreprise();
-  const isSuper = user?.role === 'SUPER_ADMIN' && !user?.dbName;
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-  }, [user, navigate]);
-
+  const currentUser = getCurrentUser();
+  const entreprise = getEntreprise();
+  const isSuper = currentUser?.role === 'SUPER_ADMIN';
+  const user = currentUser;
+  const [selectedPeriod, setSelectedPeriod] = useState('THIS_MONTH');
+  const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [payslips, setPayslips] = useState([]);
-  const [selectedPeriod, setSelectedPeriod] = useState('');
-  const [initMessage, setInitMessage] = useState('');
+  const [payments, setPayments] = useState([]);
+  const [payruns, setPayruns] = useState([]);
+  const [entreprises, setEntreprises] = useState([]);
+  const [initMessage, setInitMessage] = useState(null);
+  const [globalStats, setGlobalStats] = useState(null);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const [companies, setCompanies] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
-  const [globalStats, setGlobalStats] = useState(null);
+  const [message, setMessage] = useState('');
+  const [dashboardData, setDashboardData] = useState(null);
 
   useEffect(() => {
-    async function load() {
-      if (isSuper) {
-        try {
-          setLoadingCompanies(true);
-          const data = await fetchEntreprises();
-          setCompanies(data || []);
-        } catch (error) {
-          console.error('Erreur chargement entreprises:', error);
-          setCompanies([]);
-        } finally {
-          setLoadingCompanies(false);
-        }
-      } else {
-        try {
-          const [employeesData, payslipsData] = await Promise.all([
-            fetchEmployees(),
-            fetchPayslips()
-          ]);
-          setEmployees(employeesData.map(e => ({
-            name: e.nom,
-            company: entreprise?.nom || 'Mon Entreprise',
-            position: e.poste,
-            salary: String(e.tauxSalaire),
-            status: e.actif ? 'Actif' : 'Inactif',
-            id: e.id
-          })));
-          setPayslips(Array.isArray(payslipsData) ? payslipsData : []);
-        } catch (error) {
-          console.error('Erreur chargement données:', error);
-          setEmployees([]);
-          setPayslips([]);
-          if (error.message.includes('BD tenant non trouvée')) {
-            setInitMessage('Entreprise non initialisée. Veuillez aller à la page Entreprises et cliquer sur "Initialiser données".');
+    if (currentUser?.dbName) {
+      fetchData();
+    }
+  }, [selectedPeriod, currentUser]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      if (currentUser?.role === 'SUPER_ADMIN') {
+        // Pour le super admin, récupérer toutes les entreprises
+        const entreprisesData = await fetchEntreprises();
+        const allEntreprises = entreprisesData?.data || entreprisesData || [];
+        setEntreprises(allEntreprises);
+        setCompanies(allEntreprises);
+
+        // Récupérer les statistiques globales
+        const { fetchGlobalStats } = await import('../services/api');
+        const globalStatsData = await fetchGlobalStats();
+        setGlobalStats(globalStatsData?.data || globalStatsData);
+
+        // Pour les données détaillées, utiliser les APIs individuelles
+        let allEmployees = [];
+        let allPayslips = [];
+        let allPayments = [];
+        let allPayruns = [];
+
+        // Pour chaque entreprise, récupérer les données
+        for (const ent of allEntreprises) {
+          try {
+            const empData = await fetchEmployees({ entrepriseId: ent.id });
+            const payslipData = await fetchPayslips({ entrepriseId: ent.id });
+            const paymentData = await fetchPayments({ entrepriseId: ent.id });
+            const payrunData = await fetchPayRuns({ entrepriseId: ent.id });
+
+            // Adapter les données avec l'ID entreprise
+            const adaptedEmployees = empData.map(e => ({ ...e, entrepriseId: ent.id, entrepriseNom: ent.nom }));
+            const adaptedPayslips = payslipData.map(p => ({ ...p, entrepriseId: ent.id, entrepriseNom: ent.nom }));
+            const adaptedPayments = paymentData.map(p => ({ ...p, entrepriseId: ent.id, entrepriseNom: ent.nom }));
+            const adaptedPayruns = payrunData.map(p => ({ ...p, entrepriseId: ent.id, entrepriseNom: ent.nom }));
+
+            allEmployees = allEmployees.concat(adaptedEmployees);
+            allPayslips = allPayslips.concat(adaptedPayslips);
+            allPayments = allPayments.concat(adaptedPayments);
+            allPayruns = allPayruns.concat(adaptedPayruns);
+          } catch (error) {
+            console.warn(`Erreur lors du chargement des données pour l'entreprise ${ent.nom}:`, error);
           }
         }
-      }
-    }
-    load();
-  }, [isSuper, entreprise?.nom]);
 
-  const commonStats = [
-    { title: 'Employés actifs', value: employees.filter(e => e.status === 'Actif').length.toString(), change: '+0%', changeType: 'positive', icon: Users, color: 'blue' },
-    { title: 'Masse salariale', value: '—', change: '+0%', changeType: 'positive', icon: DollarSign, color: 'purple' },
-    { title: 'Montant payé', value: '—', change: '+0%', changeType: 'positive', icon: CheckCircle, color: 'purple' }
+        setEmployees(allEmployees);
+        setPayslips(allPayslips);
+        setPayments(allPayments);
+        setPayruns(allPayruns);
+      } else {
+        // Pour les autres utilisateurs, récupérer les données de leur entreprise via l'endpoint dashboard
+        const { getDashboardData } = await import('../services/api');
+        const dashboardInfo = await getDashboardData();
+        setDashboardData(dashboardInfo);
+
+        // Utiliser les données du dashboard pour les statistiques et récupérer les données détaillées
+        const [empRes, payslipRes, paymentRes, payrunRes] = await Promise.all([
+          fetchEmployees(),
+          fetchPayslips(),
+          fetchPayments(),
+          fetchPayRuns()
+        ]);
+        setEmployees(empRes || []);
+        setPayslips(payslipRes || []);
+        setPayments(paymentRes || []);
+        setPayruns(payrunRes || []);
+      }
+    } catch (err) {
+      console.error('Erreur lors du chargement des données:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const activeEmployees = employees.filter(e => e.actif);
+  const salaryMass = activeEmployees.reduce((sum, emp) => sum + Number(emp.tauxSalaire || 0), 0);
+  const totalPaid = payments.reduce((sum, p) => sum + Number(p.montant), 0);
+
+  // Utiliser les données du dashboard si disponibles
+  const kpis = dashboardData?.kpis || {};
+  const dashboardStats = [
+    {
+      title: 'Employés actifs',
+      value: (kpis.activeEmployees || activeEmployees.length).toString(),
+      change: '+0%',
+      changeType: 'positive',
+      icon: Users,
+      color: 'blue'
+    },
+    {
+      title: 'Masse salariale',
+      value: ((kpis.totalSalary || salaryMass) / 1000).toFixed(0) + 'k XOF',
+      change: '+0%',
+      changeType: 'positive',
+      icon: DollarSign,
+      color: 'purple'
+    },
+    {
+      title: 'Montant payé',
+      value: ((kpis.totalPaid || totalPaid) / 1000).toFixed(0) + 'k XOF',
+      change: '+0%',
+      changeType: 'positive',
+      icon: CheckCircle,
+      color: 'green'
+    },
+    {
+      title: 'Montant restant',
+      value: ((kpis.remainingAmount || 0) / 1000).toFixed(0) + 'k XOF',
+      change: '+0%',
+      changeType: 'neutral',
+      icon: TrendingUp,
+      color: 'orange'
+    }
   ];
 
-  const adminStats = commonStats;
+  // Calcul des données pour les graphiques
+  const getMonthlyPayrollData = () => {
+    // Utiliser les données du dashboard si disponibles
+    if (dashboardData?.salaryEvolution && dashboardData.salaryEvolution.length > 0) {
+      return dashboardData.salaryEvolution.map(item => ({
+        month: new Date(item.month).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }),
+        amount: item.totalSalary
+      }));
+    }
+
+    // Fallback: calculer à partir des données locales
+    const monthlyData = {};
+    payslips.forEach(payslip => {
+      if (payslip.payRun?.periode) {
+        const date = new Date(payslip.payRun.periode);
+        const monthKey = date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { month: monthKey, amount: 0 };
+        }
+        monthlyData[monthKey].amount += Number(payslip.net || 0);
+      }
+    });
+    return Object.values(monthlyData).slice(-6); // Derniers 6 mois
+  };
+
+  const getPaymentMethodsData = () => {
+    const methodCounts = {};
+    payments.forEach(payment => {
+      const method = payment.mode || 'INCONNU';
+      methodCounts[method] = (methodCounts[method] || 0) + 1;
+    });
+
+    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+    return Object.entries(methodCounts).map(([name, value], index) => ({
+      name: name === 'VIREMENT_BANCAIRE' ? 'Virement bancaire' :
+            name === 'ORANGE_MONEY' ? 'Orange Money' :
+            name === 'WAVE' ? 'Wave' :
+            name === 'ESPECES' ? 'Espèces' : name,
+      value,
+      color: colors[index % colors.length]
+    }));
+  };
+
+  const getDepartmentData = () => {
+    const deptData = {};
+    employees.forEach(employee => {
+      const dept = employee.poste || 'Non spécifié';
+      if (!deptData[dept]) {
+        deptData[dept] = { department: dept, employees: 0, payroll: 0 };
+      }
+      deptData[dept].employees += 1;
+      deptData[dept].payroll += Number(employee.tauxSalaire || 0);
+    });
+    return Object.values(deptData);
+  };
+
+  const getEntrepriseStats = () => {
+    if (currentUser?.role !== 'SUPER_ADMIN') return null;
+
+    const stats = {};
+    entreprises.forEach(ent => {
+      const entEmployees = employees.filter(e => e.entrepriseId === ent.id);
+      const entPayslips = payslips.filter(p => p.entrepriseId === ent.id);
+      const entPayments = payments.filter(p => p.entrepriseId === ent.id);
+
+      stats[ent.id] = {
+        nom: ent.nom,
+        employees: entEmployees.length,
+        activeEmployees: entEmployees.filter(e => e.actif).length,
+        totalPayroll: entPayslips.reduce((sum, p) => sum + Number(p.net || 0), 0),
+        totalPayments: entPayments.length,
+        paidPayslips: entPayslips.filter(p => p.status === 'PAYE').length,
+      };
+    });
+    return stats;
+  };
+
+  const stats = {
+    totalPayroll: payslips.reduce((sum, p) => sum + Number(p.net || 0), 0),
+    totalEmployees: employees.length,
+    activeEmployees: employees.filter(e => e.actif).length,
+    averageSalary: employees.length > 0
+      ? employees.reduce((sum, e) => sum + Number(e.tauxSalaire || 0), 0) / employees.length
+      : 0,
+    totalPayments: payments.length,
+    paidPayslips: payslips.filter(p => p.status === 'PAYE').length,
+    totalEntreprises: entreprises.length,
+  };
+
+  const entrepriseStats = getEntrepriseStats();
+
+  const monthlyPayrollData = getMonthlyPayrollData();
+  const paymentMethodsData = getPaymentMethodsData();
+  const departmentData = getDepartmentData();
 
   return (
     <div className="overflow-hidden space-y-8">
@@ -88,10 +280,9 @@ export default function Dashboard() {
               try {
                 const { initEntreprise } = await import('../services/api');
                 await initEntreprise(entreprise?.id);
-                alert('Entreprise initialisée avec succès ! Veuillez recharger la page.');
-                window.location.reload();
+                setMessage('Entreprise initialisée avec succès !');
               } catch (error) {
-                alert('Erreur lors de l\'initialisation: ' + error.message);
+                setMessage('Erreur lors de l\'initialisation: ' + error.message);
               }
             }}
             className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded"
@@ -124,11 +315,12 @@ export default function Dashboard() {
                   onClick={async () => {
                     try {
                       const period = selectedPeriod || new Date().toISOString().slice(0, 7);
+                      const { generateMonthlyPayslips } = await import('../services/api');
                       await generateMonthlyPayslips(period);
-                      alert(`Bulletins générés pour ${period} avec succès !`);
-                      window.location.reload();
+                      setMessage(`Bulletins générés pour ${period} avec succès !`);
+                      await fetchData(); // Recharger les données
                     } catch (error) {
-                      alert('Erreur lors de la génération: ' + error.message);
+                      setMessage('Erreur lors de la génération: ' + error.message);
                     }
                   }}
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2"
@@ -144,6 +336,18 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {message && (
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+          {message}
+          <button
+            onClick={() => setMessage('')}
+            className="float-right text-green-700 hover:text-green-900"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       {isSuper ? (
@@ -185,235 +389,174 @@ export default function Dashboard() {
         )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {adminStats.map((stat, index) => (
+          {dashboardStats.map((stat, index) => (
             <StatsCard key={index} {...stat} />
           ))}
         </div>
       )}
 
-      {/* Content */}
-      {isSuper ? (
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Entreprises</h2>
-          {loadingCompanies ? (
-            <div className="text-sm text-gray-500">Chargement des entreprises...</div>
-          ) : (companies || []).length === 0 ? (
-            <div className="text-sm text-gray-500">Aucune entreprise</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(companies || []).map((c) => (
-                <div key={c.id} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
-                  <div className="flex items-center mb-4">
-                    <img src={c.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.nom)}&background=6a0dad&color=fff`} className="w-12 h-12 rounded mr-3" />
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg">{c.nom}</h3>
-                      <p className="text-sm text-gray-500">{c.adresse || 'Adresse non spécifiée'}</p>
-                    </div>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      Active
-                    </span>
-                  </div>
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Devise:</span>
-                      <span className="font-medium">{c.paiement}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Utilisateurs:</span>
-                      <span className="font-medium">{c._count?.users || c.users?.length || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Employés:</span>
-                      <span className="font-medium">{c._count?.employees || 0}</span>
-                    </div>
-                  </div>
-                  <button
-                    className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-                    onClick={() => navigate(`/entreprises/${c.id}`)}
-                  >
-                    Ouvrir
-                  </button>
-                </div>
-              ))}
+      {/* Graphiques - Ligne 1 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Tendance de la paie mensuelle */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">Tendance de la paie mensuelle</h3>
+            <div className="flex items-center text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
+              <TrendingUp className="h-4 w-4 mr-1" />
+              +5.2%
             </div>
-          )}
-          {!loadingCompanies && globalStats && (
-            <div className="mt-8">
-              <ChartCard
-                title="Répartition des employés par entreprise"
-                data={(companies || []).map(c => ({
-                  name: c.nom,
-                  value: c._count?.employees || 0
-                }))}
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={monthlyPayrollData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" stroke="#6b7280" />
+              <YAxis stroke="#6b7280" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                }}
+                formatter={(value) => [`${value.toLocaleString()} XOF`, 'Montant']}
               />
-            </div>
-          )}
+              <Line
+                type="monotone"
+                dataKey="amount"
+                stroke="#3b82f6"
+                strokeWidth={3}
+                dot={{ fill: '#3b82f6', strokeWidth: 2, r: 6 }}
+                activeDot={{ r: 8, stroke: '#3b82f6', strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ChartCard title="Évolution des salaires" data={[]} />
-            <ChartCard title="Répartition par département" data={[]} />
-          </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">Évolutions de l'entreprise</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center p-4 border rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">{employees.length}</div>
-                <div className="text-sm text-gray-600">Employés actifs</div>
-                <div className="text-xs text-green-600 mt-1">+0 ce mois</div>
-              </div>
-              <div className="text-center p-4 border rounded-lg">
-                <div className="text-2xl font-bold text-green-600">
-                  {employees.reduce((sum, emp) => sum + parseFloat(emp.salary.replace(/[^0-9.-]+/g, '')), 0).toLocaleString()} XOF
-                </div>
-                <div className="text-sm text-gray-600">Masse salariale</div>
-                <div className="text-xs text-green-600 mt-1">+0% ce mois</div>
-              </div>
-              <div className="text-center p-4 border rounded-lg">
-                <div className="text-2xl font-bold text-purple-600">0</div>
-                <div className="text-sm text-gray-600">Paiements ce mois</div>
-                <div className="text-xs text-green-600 mt-1">+0 ce mois</div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">Informations des employés</h2>
-            <div className="space-y-4">
-              {employees.map((employee, index) => {
-                const employeePayslips = (Array.isArray(payslips) ? payslips : []).filter(p => p.employeeId === employee.id);
-                const latestPayslip = employeePayslips.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-                const totalPaid = employeePayslips.reduce((sum, p) => sum + Number(p.montant || 0), 0);
-                const remaining = latestPayslip ? Number(latestPayslip.net) - totalPaid : 0;
-
-                return (
-                  <div key={index} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3
-                          className="font-medium text-lg cursor-pointer hover:text-blue-600"
-                          onClick={() => {
-                            setSelectedEmployee(employee);
-                            setShowEmployeeModal(true);
-                          }}
-                        >
-                          {employee.name}
-                        </h3>
-                        <p className="text-gray-600">{employee.position}</p>
-                        <p className="text-sm text-gray-500">Entreprise: {employee.company}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-green-600">{employee.salary} XOF</p>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          employee.status === 'Actif' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {employee.status}
-                        </span>
-                      </div>
-                    </div>
-
-                    {latestPayslip && (
-                      <div className="bg-gray-50 rounded p-3">
-                        <h4 className="font-medium text-sm mb-2">Dernier bulletin de paie</h4>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-gray-600">Brut:</span>
-                            <span className="font-medium ml-1">{latestPayslip.brut} XOF</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Déductions:</span>
-                            <span className="font-medium ml-1">{latestPayslip.deductions} XOF</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Net:</span>
-                            <span className="font-medium ml-1">{latestPayslip.net} XOF</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Statut:</span>
-                            <span className={`font-medium ml-1 ${
-                              latestPayslip.status === 'PAYE' ? 'text-green-600' :
-                              latestPayslip.status === 'PARTIEL' ? 'text-yellow-600' : 'text-red-600'
-                            }`}>
-                              {latestPayslip.status}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="mt-2 pt-2 border-t border-gray-200">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Total payé:</span>
-                            <span className="font-medium">{totalPaid} XOF</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Restant à payer:</span>
-                            <span className={`font-medium ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {remaining} XOF
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {employeePayslips.length > 0 && (
-                      <div className="mt-3">
-                        <h4 className="font-medium text-sm mb-2">Historique des paiements</h4>
-                        <div className="space-y-1">
-                          {employeePayslips.slice(0, 3).map((payment, idx) => (
-                            <div key={idx} className="flex justify-between text-xs bg-gray-50 px-2 py-1 rounded">
-                              <span>{new Date(payment.date).toLocaleDateString('fr-FR')}</span>
-                              <span className="font-medium">{payment.montant} XOF</span>
-                              <span className="text-gray-500">{payment.mode}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Modal employé */}
-      {showEmployeeModal && selectedEmployee && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4">Détails de l'employé</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="font-medium">Nom:</label>
-                <p>{selectedEmployee.name}</p>
-              </div>
-              <div>
-                <label className="font-medium">Poste:</label>
-                <p>{selectedEmployee.position}</p>
-              </div>
-              <div>
-                <label className="font-medium">Salaire:</label>
-                <p>{selectedEmployee.salary} XOF</p>
-              </div>
-              <div>
-                <label className="font-medium">Statut:</label>
-                <p>{selectedEmployee.status}</p>
-              </div>
-              <div>
-                <label className="font-medium">Entreprise:</label>
-                <p>{selectedEmployee.company}</p>
-              </div>
-            </div>
-            <div className="flex justify-end mt-6">
-              <button
-                onClick={() => setShowEmployeeModal(false)}
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+        {/* Répartition des méthodes de paiement */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h3 className="text-xl font-semibold text-gray-900 mb-6">Répartition des méthodes de paiement</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={paymentMethodsData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={5}
+                dataKey="value"
               >
-                Fermer
-              </button>
-            </div>
+                {paymentMethodsData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Analyse par poste */}
+      <div className="bg-white p-6 rounded-lg shadow mb-8">
+        <h3 className="text-xl font-semibold text-gray-900 mb-6">Analyse par poste</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={departmentData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="department" stroke="#6b7280" />
+            <YAxis stroke="#6b7280" />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#fff',
+                border: 'none',
+                borderRadius: '12px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+              }}
+              formatter={(value, name) => [
+                name === 'payroll' ? `${value.toLocaleString()} XOF` : value,
+                name === 'payroll' ? 'Paie totale' : 'Employés'
+              ]}
+            />
+            <Legend />
+            <Bar dataKey="employees" fill="#3b82f6" name="Employés" />
+            <Bar dataKey="payroll" fill="#10b981" name="Paie totale (XOF)" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Table des rapports mensuels */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium">Rapports de paie mensuels</h3>
+        </div>
+        <div className="p-6">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Période
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Employés
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Paie brute
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Déductions
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Paie nette
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Statut
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {payruns.slice(0, 10).map((payrun) => {
+                  const payrunPayslips = payslips.filter(p => p.payRunId === payrun.id);
+                  const totalBrut = payrunPayslips.reduce((sum, p) => sum + Number(p.brut || 0), 0);
+                  const totalDeductions = payrunPayslips.reduce((sum, p) => sum + Number(p.deductions || 0), 0);
+                  const totalNet = payrunPayslips.reduce((sum, p) => sum + Number(p.net || 0), 0);
+
+                  return (
+                    <tr key={payrun.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {payrun.periode ? new Date(payrun.periode).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long' }) : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {payrunPayslips.length}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {totalBrut.toLocaleString()} XOF
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {totalDeductions.toLocaleString()} XOF
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        {totalNet.toLocaleString()} XOF
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
+                          payrun.status === 'CLOTURE' ? 'bg-green-100 text-green-800' :
+                          payrun.status === 'APPROUVE' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {payrun.status === 'CLOTURE' ? 'Clôturé' :
+                           payrun.status === 'APPROUVE' ? 'Approuvé' :
+                           'Brouillon'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

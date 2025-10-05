@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // Cache for parsed data to avoid creating new objects
 let cachedUser = null;
@@ -103,6 +103,11 @@ export async function updateEmployee(id, payload) {
 
 export async function deleteEmployee(id) {
   const res = await apiFetch(`/employees/${id}`, { method: 'DELETE' });
+  return res.data;
+}
+
+export async function confirmEmployeeCode(employeeId, code) {
+  const res = await apiFetch(`/employees/${employeeId}/confirm-code`, { method: 'POST', body: { code } });
   return res.data;
 }
 
@@ -277,5 +282,88 @@ export async function downloadPayslipPDF(payslipId) {
 // Change user role (Super Admin only)
 export async function changeUserRole(userId, newRole) {
   const res = await apiFetch('/users/change-role', { method: 'POST', body: { userId, newRole } });
+  return res.data;
+}
+
+// Pointages
+export async function createPointage(pointageData) {
+  const res = await apiFetch('/pointages', { method: 'POST', body: pointageData });
+  return res.data;
+}
+
+export async function getPointages(filters = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, value);
+    }
+  });
+  const res = await apiFetch(`/pointages${params.toString() ? `?${params}` : ''}`);
+  return res.data;
+}
+
+export async function getPointagesByEmployeeAndDate(employeeId, date) {
+  const res = await apiFetch(`/pointages/employee/${employeeId}/date/${date}`);
+  return res.data;
+}
+
+export async function getWorkedHours(employeeId, month, year) {
+  const res = await apiFetch(`/pointages/employee/${employeeId}/worked-hours/${month}/${year}`);
+  return res.data;
+}
+
+export async function getAttendanceSummary(employeeId, month, year) {
+  const res = await apiFetch(`/pointages/employee/${employeeId}/attendance/${month}/${year}`);
+  return res.data;
+}
+
+export async function updatePointage(id, updateData) {
+  const res = await apiFetch(`/pointages/${id}`, { method: 'PUT', body: updateData });
+  return res.data;
+}
+
+export async function deletePointage(id) {
+  const res = await apiFetch(`/pointages/${id}`, { method: 'DELETE' });
+  return res.data;
+}
+
+export async function getLastPointageTimes() {
+  const res = await apiFetch('/pointages/last-pointage-times');
+  return res.data;
+}
+
+export async function createUser(payload) {
+  const res = await apiFetch('/users', { method: 'POST', body: payload });
+  return res.data;
+}
+
+// Pointages et présences
+export async function getAttendance(filters = {}) {
+  const params = new URLSearchParams(filters);
+  const res = await apiFetch(`/pointages/attendance${params.toString() ? `?${params}` : ''}`);
+  return res.data;
+}
+
+export async function markAbsences(date) {
+  const res = await apiFetch('/pointages/attendance/mark-absences', { method: 'POST', body: { date } });
+  return res.data;
+}
+
+// Télécharger le QR code d'un employé
+export async function downloadEmployeeQR(employeeId) {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/employees/${employeeId}/qr`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Erreur lors du téléchargement du QR code');
+  return response.blob();
+}
+
+// Dashboard
+export async function getDashboardData() {
+  const res = await apiFetch('/dashboard');
   return res.data;
 }

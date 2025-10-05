@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Filter, Plus, UserCheck, UserX, Users, FileText, Download, X } from 'lucide-react';
-import { fetchEmployees, getEntreprise, getCurrentUser, fetchEntreprises, createEmployee, toggleEmployeeStatus, setEntreprise, fetchPayslipsByEmployee, downloadPayslipPDF } from '../services/api';
+import { Search, Filter, Plus, UserCheck, UserX, Users, FileText, Download, X, Scan } from 'lucide-react';
+import { fetchEmployees, getEntreprise, getCurrentUser, fetchEntreprises, createEmployee, toggleEmployeeStatus, setEntreprise, fetchPayslipsByEmployee, downloadPayslipPDF, confirmEmployeeCode, createUser } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export default function Employees() {
@@ -115,9 +115,15 @@ export default function Employees() {
   ];
   const [showAdd, setShowAdd] = useState(false);
   const [showPayslips, setShowPayslips] = useState(false);
+  const [showQRCode, setShowQRCode] = useState(false);
+  const [showConfirmCode, setShowConfirmCode] = useState(false);
+  const [showAddUser, setShowAddUser] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [employeePayslips, setEmployeePayslips] = useState([]);
-  const [form, setForm] = useState({ nom: '', poste: '', typeContrat: 'FIXE', tauxSalaire: '', joursTravailles: '', coordonneesBancaires: '', entrepriseId: '' });
+  const [employeeQRCode, setEmployeeQRCode] = useState('');
+  const [confirmationCode, setConfirmationCode] = useState('');
+  const [form, setForm] = useState({ nom: '', email: '', poste: '', typeContrat: 'FIXE', tauxSalaire: '', joursTravailles: '', coordonneesBancaires: '', entrepriseId: '' });
+  const [userForm, setUserForm] = useState({ nom: '', email: '', role: 'EMPLOYE' });
   const rateLabel = form.typeContrat === 'FIXE'
     ? 'Salaire mensuel'
     : form.typeContrat === 'JOURNALIER'
@@ -146,6 +152,35 @@ export default function Employees() {
     }
   };
 
+  const openAddUserModal = (employee) => {
+    setSelectedEmployee(employee);
+    setUserForm({ nom: employee.name, email: '', role: 'EMPLOYE' });
+    setShowAddUser(true);
+  };
+
+  const handleCreateUser = async () => {
+    try {
+      // Only allow admin roles to create users
+      const currentUser = getCurrentUser();
+      if (!['SUPER_ADMIN', 'ADMIN'].includes(currentUser?.role)) {
+        alert('Seuls les administrateurs peuvent créer des utilisateurs.');
+        return;
+      }
+      const payload = {
+        nom: userForm.nom,
+        email: userForm.email,
+        role: userForm.role,
+        entrepriseId: entreprise?.id,
+      };
+      // Call API to create user
+      await createUser(payload);
+      setShowAddUser(false);
+      alert('Utilisateur ajouté avec succès');
+    } catch (error) {
+      alert('Erreur lors de la création de l\'utilisateur: ' + error.message);
+    }
+  };
+
   const viewPayslips = async (employee) => {
     try {
       setLoading(true);
@@ -160,6 +195,7 @@ export default function Employees() {
     }
   };
 
+
   const downloadPDF = async (payslipId) => {
     try {
       const blob = await downloadPayslipPDF(payslipId);
@@ -171,6 +207,42 @@ export default function Employees() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       alert('Erreur lors du téléchargement: ' + error.message);
+    }
+  };
+
+  const displayQRCode = (employee) => {
+    setSelectedEmployee(employee);
+    setEmployeeQRCode(employee.raw.qrCode);
+    setShowQRCode(true);
+  };
+
+  const openConfirmCodeModal = (employee) => {
+    setSelectedEmployee(employee);
+    setConfirmationCode('');
+    setShowConfirmCode(true);
+  };
+
+  const handleConfirmCode = async () => {
+    try {
+      await confirmEmployeeCode(selectedEmployee.id, confirmationCode);
+      setShowConfirmCode(false);
+      // Refresh the employee list to show the QR code
+      const query = entreprise ? { entrepriseId: entreprise.id } : {};
+      const data = await fetchEmployees(query);
+      const adapted = data.map(e => ({
+        id: e.id,
+        name: e.nom,
+        position: e.poste,
+        contractType: e.typeContrat,
+        rate: String(e.tauxSalaire),
+        status: e.actif ? 'Actif' : 'Inactif',
+        company: entreprise?.nom || 'Mon Entreprise',
+        raw: e,
+      }));
+      setEmployees(adapted);
+      alert('Code confirmé, QR code généré !');
+    } catch (err) {
+      alert('Erreur: ' + err.message);
     }
   };
 
@@ -190,6 +262,7 @@ export default function Employees() {
 
       const payload = {
         nom: form.nom,
+        email: form.email,
         poste: form.poste,
         typeContrat: form.typeContrat,
         tauxSalaire: parseFloat(form.tauxSalaire),
@@ -342,6 +415,10 @@ export default function Employees() {
                 <input className="w-full px-3 py-2 border rounded-lg" value={form.nom} onChange={(e)=>setForm({...form, nom:e.target.value})} />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <input type="email" className="w-full px-3 py-2 border rounded-lg" value={form.email} onChange={(e)=>setForm({...form, email:e.target.value})} />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Profession</label>
                 <input
                   list="profession-options"
@@ -469,6 +546,146 @@ export default function Employees() {
         </div>
       )}
 
+      {/* QR Code Modal */}
+      {showQRCode && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">QR Code - {selectedEmployee.name}</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="text-center">
+                <div className="bg-gray-100 p-4 rounded-lg inline-block">
+                  <Scan className="w-32 h-32 text-gray-800 mx-auto" />
+                </div>
+                <p className="text-sm text-gray-600 mt-4">
+                  Ce QR code permet à {selectedEmployee.name} de se pointer automatiquement.
+                </p>
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">Code QR :</h4>
+                <div className="bg-white p-2 rounded border text-xs font-mono break-all">
+                  {employeeQRCode}
+                </div>
+              </div>
+
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h4 className="font-medium text-green-900 mb-2">Lien de pointage :</h4>
+                <div className="bg-white p-2 rounded border text-xs font-mono break-all">
+                  {window.location.origin}/employee-pointage
+                </div>
+                <p className="text-sm text-green-700 mt-2">
+                  Les employés peuvent scanner ce QR code ou accéder directement à ce lien pour se pointer.
+                </p>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                className="px-4 py-2"
+                onClick={() => setShowQRCode(false)}
+              >
+                Fermer
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                onClick={() => {
+                  navigator.clipboard.writeText(employeeQRCode);
+                  alert('Code QR copié dans le presse-papiers !');
+                }}
+              >
+                Copier le code
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Code Modal */}
+      {/* {showConfirmCode && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Confirmer le code pour {selectedEmployee.name}</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                Entrez le code de confirmation reçu par email pour générer le QR code.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Code de confirmation</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border rounded-lg"
+                  value={confirmationCode}
+                  onChange={(e) => setConfirmationCode(e.target.value)}
+                  placeholder="Entrez le code"
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                className="px-4 py-2"
+                onClick={() => setShowConfirmCode(false)}
+              >
+                Annuler
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                onClick={handleConfirmCode}
+              >
+                Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      )} */}
+
+      {/* Add User Modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Ajouter un utilisateur à {selectedEmployee?.name}</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nom</label>
+                <input
+                  className="w-full px-3 py-2 border rounded-lg"
+                  value={userForm.nom}
+                  onChange={(e) => setUserForm({ ...userForm, nom: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <input
+                  type="email"
+                  className="w-full px-3 py-2 border rounded-lg"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Rôle</label>
+                <select
+                  className="w-full px-3 py-2 border rounded-lg"
+                  value={userForm.role}
+                  onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                >
+                  <option value="EMPLOYE">Employé</option>
+                  <option value="CAISSIER">Caissier</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button className="px-4 py-2" onClick={() => setShowAddUser(false)}>Annuler</button>
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg" onClick={handleCreateUser}>Ajouter</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Employees Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading && (
@@ -489,62 +706,69 @@ export default function Employees() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {pageData.map((employee) => (
-              <tr key={employee.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {employee.name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {employee.position}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {employee.contractType}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {employee.rate}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {employee.company}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    employee.status === 'Actif' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {employee.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                  <button
-                    onClick={() => toggleStatus(employee.id)}
-                    className={`p-1 rounded ${
-                      employee.status === 'Actif'
-                        ? 'text-red-600 hover:bg-red-100'
-                        : 'text-green-600 hover:bg-green-100'
-                    }`}
-                    title={employee.status === 'Actif' ? 'Désactiver' : 'Activer'}
-                  >
-                    {employee.status === 'Actif' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                  </button>
-                  <button
-                    onClick={() => viewPayslips(employee)}
-                    className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-100"
-                    title="Voir bulletins"
-                  >
-                    <FileText className="w-4 h-4" />
-                  </button>
-                  <button className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100">
-                    Éditer
-                  </button>
-                  <button className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-100">
-                    Supprimer
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {pageData.map((employee) => (
+          <tr key={employee.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openAddUserModal(employee)}>
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+              {employee.name}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {employee.position}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {employee.contractType}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {employee.rate}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {employee.company}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap">
+              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                employee.status === 'Actif' 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                {employee.status}
+              </span>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleStatus(employee.id); }}
+                className={`p-1 rounded ${
+                  employee.status === 'Actif'
+                    ? 'text-red-600 hover:bg-red-100'
+                    : 'text-green-600 hover:bg-green-100'
+                }`}
+                title={employee.status === 'Actif' ? 'Désactiver' : 'Activer'}
+              >
+                {employee.status === 'Actif' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); viewPayslips(employee); }}
+                className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-100"
+                title="Voir bulletins"
+              >
+                <FileText className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); navigate('/employee-pointage'); }}
+                className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100"
+                title="Scanner pointage"
+              >
+                <Scan className="w-4 h-4" />
+              </button>
+              <button className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-100">
+                Éditer
+              </button>
+              <button className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-100">
+                Supprimer
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
         </table>
         <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
           <div className="flex items-center justify-between">
@@ -592,4 +816,3 @@ export default function Employees() {
     </div>
   );
 }
-

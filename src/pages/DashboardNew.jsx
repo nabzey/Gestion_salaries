@@ -41,10 +41,6 @@ export default function DashboardNew() {
             <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
             Cards
           </a>
-          <a href="#" className="flex items-center px-3 py-2 rounded hover:bg-purple-700">
-            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
-            Reports
-          </a>
         </nav>
         <div className="px-4 py-6 border-t border-purple-800 space-y-2">
           <a href="#" className="flex items-center px-3 py-2 rounded hover:bg-purple-700">

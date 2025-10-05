@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Users, Calendar, FileText, CreditCard } from 'lucide-react';
+import { Home, Users, Calendar, FileText, CreditCard, Clock, BarChart3 } from 'lucide-react';
 
 export default function Sidebar() {
 
   const menu = [
     { to: '/dashboard', label: 'Dashboard', icon: <Home className="w-5 h-5 mr-2" /> },
     { to: '/employees', label: 'Employés', icon: <Users className="w-5 h-5 mr-2" /> },
+    { to: '/pointages', label: 'Pointages', icon: <Clock className="w-5 h-5 mr-2" /> },
     { to: '/payruns', label: 'Cycles de Paie', icon: <Calendar className="w-5 h-5 mr-2" /> },
     { to: '/payslips', label: 'Bulletins', icon: <FileText className="w-5 h-5 mr-2" /> },
     { to: '/payments', label: 'Paiements', icon: <CreditCard className="w-5 h-5 mr-2" /> },
