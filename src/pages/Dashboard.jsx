@@ -38,7 +38,7 @@ export default function Dashboard() {
   const entreprise = getEntreprise();
   const isSuper = currentUser?.role === 'SUPER_ADMIN';
   const user = currentUser;
-  const [selectedPeriod, setSelectedPeriod] = useState('THIS_MONTH');
+  const [selectedPeriod, setSelectedPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [payslips, setPayslips] = useState([]);
@@ -308,16 +308,15 @@ export default function Dashboard() {
                 <input
                   type="month"
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  defaultValue={new Date().toISOString().slice(0, 7)}
+                  value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value)}
                 />
                 <button
                   onClick={async () => {
                     try {
-                      const period = selectedPeriod || new Date().toISOString().slice(0, 7);
                       const { generateMonthlyPayslips } = await import('../services/api');
-                      await generateMonthlyPayslips(period);
-                      setMessage(`Bulletins générés pour ${period} avec succès !`);
+                      await generateMonthlyPayslips(selectedPeriod);
+                      setMessage(`Bulletins générés pour ${selectedPeriod} avec succès !`);
                       await fetchData(); // Recharger les données
                     } catch (error) {
                       setMessage('Erreur lors de la génération: ' + error.message);
@@ -371,7 +370,7 @@ export default function Dashboard() {
             />
             <StatsCard
               title="Total Employés"
-              value={globalStats.totalEmployees?.toString() || '0'}
+              value={globalStats.totalEntreprises?.toString() || '0'}
               change="+0%"
               changeType="positive"
               icon={Factory}
@@ -484,79 +483,6 @@ export default function Dashboard() {
         </ResponsiveContainer>
       </div>
 
-      {/* Table des rapports mensuels */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium">Rapports de paie mensuels</h3>
-        </div>
-        <div className="p-6">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Période
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Employés
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Paie brute
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Déductions
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Paie nette
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Statut
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {payruns.slice(0, 10).map((payrun) => {
-                  const payrunPayslips = payslips.filter(p => p.payRunId === payrun.id);
-                  const totalBrut = payrunPayslips.reduce((sum, p) => sum + Number(p.brut || 0), 0);
-                  const totalDeductions = payrunPayslips.reduce((sum, p) => sum + Number(p.deductions || 0), 0);
-                  const totalNet = payrunPayslips.reduce((sum, p) => sum + Number(p.net || 0), 0);
-
-                  return (
-                    <tr key={payrun.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {payrun.periode ? new Date(payrun.periode).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long' }) : 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {payrunPayslips.length}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {totalBrut.toLocaleString()} XOF
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {totalDeductions.toLocaleString()} XOF
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {totalNet.toLocaleString()} XOF
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
-                          payrun.status === 'CLOTURE' ? 'bg-green-100 text-green-800' :
-                          payrun.status === 'APPROUVE' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {payrun.status === 'CLOTURE' ? 'Clôturé' :
-                           payrun.status === 'APPROUVE' ? 'Approuvé' :
-                           'Brouillon'}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

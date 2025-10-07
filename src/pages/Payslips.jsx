@@ -16,7 +16,7 @@ export default function Payslips() {
   const [payslips, setPayslips] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('EN_ATTENTE');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [filterPayRun, setFilterPayRun] = useState('all');
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export default function Payslips() {
       navigate('/entreprises');
       return;
     }
-    if (user && user.dbName && entreprise) {
+    if (user && entreprise?.dbName) {
       loadPayslips();
     }
   }, [user, entreprise, navigate]);

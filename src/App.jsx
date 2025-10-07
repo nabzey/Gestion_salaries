@@ -10,7 +10,14 @@ import Payslips from './pages/Payslips';
 import Payments from './pages/Payments';
 import Pointages from './pages/Pointages';
 import EmployeePointage from './pages/EmployeePointage';
+import EmployeeLogin from './pages/EmployeeLogin';
+import EmployeeDashboard from './pages/EmployeeDashboard';
+import EmployeeProfile from './pages/EmployeeProfile';
+import EmployeePayslips from './pages/EmployeePayslips';
+import EmployeePointages from './pages/EmployeePointages';
+import Conges from './pages/Conges';
 import Users from './pages/Users';
+import VigilDashboard from './pages/VigilDashboard';
 import Login from './pages/Login';
 
 function App() {
@@ -18,7 +25,63 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/employee-pointage" element={<EmployeePointage />} />
+        <Route path="/employee-login" element={<EmployeeLogin />} />
+        <Route
+          path="/vigil-dashboard"
+          element={
+            <ProtectedRoute>
+              <VigilDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee-dashboard"
+          element={
+            <ProtectedRoute>
+              <EmployeeDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee-profile"
+          element={
+            <ProtectedRoute>
+              <EmployeeProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee-pointage"
+          element={
+            <ProtectedRoute>
+              <EmployeePointage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/conges"
+          element={
+            <ProtectedRoute>
+              <Conges />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee-payslips"
+          element={
+            <ProtectedRoute>
+              <EmployeePayslips />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee-pointages"
+          element={
+            <ProtectedRoute>
+              <EmployeePointages />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/*"
           element={

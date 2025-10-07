@@ -50,7 +50,7 @@ export default function Payments() {
 
   useEffect(() => {
     async function loadData() {
-      if (!user || (user.role === 'SUPER_ADMIN' && !entreprise) || !user.dbName) {
+      if (!user || (user.role === 'SUPER_ADMIN' && !entreprise) || !entreprise?.dbName) {
         return;
       }
       try {
@@ -59,11 +59,11 @@ export default function Payments() {
         const { fetchPayments, fetchPayslips, fetchEmployees } = await import('../services/api');
         const [paymentsData, payslipsData, employeesData] = await Promise.all([
           fetchPayments(),
-          fetchPayslips({ payRunStatus: 'APPROUVE' }), // Bulletins approuvés
+          fetchPayslips(), // Tous les bulletins pour affichage
           fetchEmployees()
         ]);
         setPayments(paymentsData);
-        setApprovedPayslips(payslipsData.filter(p => p.payRun?.status === 'APPROUVE'));
+        setApprovedPayslips(payslipsData);
         setEmployees(employeesData);
       } catch (err) {
         setError(err.message || 'Erreur de chargement');
@@ -97,7 +97,7 @@ export default function Payments() {
   const methods = ['all', 'ESPECES', 'VIREMENT_BANCAIRE', 'ORANGE_MONEY', 'WAVE'];
 
   const handleCreate = async () => {
-    if (!user || !user.dbName) {
+    if (!user || !entreprise?.dbName) {
       setError('Action non autorisée pour ce type d\'utilisateur');
       return;
     }
@@ -134,7 +134,7 @@ export default function Payments() {
   };
 
   const generateReceipt = async (payment) => {
-    if (!user || !user.dbName) {
+    if (!user || !entreprise?.dbName) {
       alert('Action non autorisée pour ce type d\'utilisateur');
       return;
     }
@@ -157,7 +157,7 @@ export default function Payments() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-gray-900">Paiements</h1>
-          <div className="text-sm text-gray-500">({filteredPayslips.length} bulletins approuvés)</div>
+          <div className="text-sm text-gray-500">({filteredPayslips.length} bulletins)</div>
         </div>
       </div>
 
@@ -223,15 +223,19 @@ export default function Payments() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                  <button
-                    onClick={() => {
-                      setForm({ montant: '', mode: 'ESPECES', payslipId: payslip.id.toString(), date: '' });
-                      setShowAddModal(true);
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs"
-                  >
-                    Payer
-                  </button>
+                  {payslip.payRun?.status === 'APPROUVE' ? (
+                    <button
+                      onClick={() => {
+                        setForm({ montant: '', mode: 'ESPECES', payslipId: payslip.id.toString(), date: '' });
+                        setShowAddModal(true);
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs"
+                    >
+                      Payer
+                    </button>
+                  ) : (
+                    <span className="text-gray-400 text-xs">Cycle non approuvé</span>
+                  )}
                   <button className="text-gray-600 hover:text-gray-900 p-1 rounded hover:bg-gray-100">
                     Détails
                   </button>
@@ -243,8 +247,8 @@ export default function Payments() {
         {filteredPayslips.length === 0 && !loading && (
           <div className="text-center py-12">
             <DollarSign className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun bulletin approuvé trouvé</h3>
-            <p className="mt-1 text-sm text-gray-500">Les bulletins apparaîtront ici une fois approuvés dans les cycles de paie.</p>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun bulletin trouvé</h3>
+            <p className="mt-1 text-sm text-gray-500">Les bulletins apparaîtront ici une fois générés.</p>
           </div>
         )}
       </div>

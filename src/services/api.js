@@ -62,6 +62,27 @@ export async function login(email, password) {
   return data;
 }
 
+export async function loginEmployee(email, password) {
+  const payload = { email, password };
+  const res = await apiFetch('/employees/login', { method: 'POST', body: payload });
+  // Expected shape: { message, data: { user, token } }
+  const { data } = res;
+  localStorage.setItem('accessToken', data.token);
+  localStorage.setItem('user', JSON.stringify(data.user));
+  // Pour les employés, on conserve aussi les infos entreprise
+  if (data.user?.entreprise) {
+    localStorage.setItem('entreprise', JSON.stringify(data.user.entreprise));
+  } else {
+    localStorage.removeItem('entreprise');
+  }
+  // Clear cache to force refresh
+  cachedUser = null;
+  cachedEntreprise = null;
+  lastUserStr = null;
+  lastEntrepriseStr = null;
+  return data;
+}
+
 export function getEntreprise() {
   const str = localStorage.getItem('entreprise');
   if (str !== lastEntrepriseStr) {
@@ -291,6 +312,26 @@ export async function createPointage(pointageData) {
   return res.data;
 }
 
+// Pointage employé (public - sans authentification)
+export async function createEmployeePointage(pointageData) {
+  const res = await fetch(`${API_URL}/pointages/employee`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(pointageData),
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+    throw new Error(errorData.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data;
+}
+
 export async function getPointages(filters = {}) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
@@ -365,5 +406,79 @@ export async function downloadEmployeeQR(employeeId) {
 // Dashboard
 export async function getDashboardData() {
   const res = await apiFetch('/dashboard');
+  return res.data;
+}
+
+// Employee Dashboard
+export async function fetchEmployeeDashboard() {
+  const res = await apiFetch('/employees/dashboard');
+  return res.data;
+}
+
+// Employee Pointages
+export async function fetchEmployeePointages() {
+  const res = await apiFetch('/employees/pointages');
+  return res.data;
+}
+
+// Employee Payslips
+export async function fetchEmployeePayslips() {
+  const res = await apiFetch('/employees/payslips');
+  return res.data;
+}
+
+// Download Employee Payslip PDF
+export async function downloadEmployeePayslipPDF(payslipId) {
+  const token = getToken();
+  const response = await fetch(`${API_URL}/payslips/my/${payslipId}/pdf`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Erreur lors du téléchargement');
+  return response.blob();
+}
+
+// Congés
+export async function createCongeRequest(data) {
+  const res = await apiFetch('/conges/request', { method: 'POST', body: data });
+  return res.data;
+}
+
+export async function getMyCongeRequests(filters = {}) {
+  const params = new URLSearchParams(filters);
+  const res = await apiFetch(`/conges/my-requests${params.toString() ? `?${params}` : ''}`);
+  return res.data;
+}
+
+export async function cancelCongeRequest(id) {
+  const res = await apiFetch(`/conges/my-requests/${id}/cancel`, { method: 'PATCH' });
+  return res.data;
+}
+
+export async function getCongeBalance() {
+  const res = await apiFetch('/conges/balance');
+  return res.data;
+}
+
+export async function getAllCongeRequests(filters = {}) {
+  const params = new URLSearchParams(filters);
+  const res = await apiFetch(`/conges${params.toString() ? `?${params}` : ''}`);
+  return res.data;
+}
+
+export async function approveCongeRequest(id, commentaireRH) {
+  const res = await apiFetch(`/conges/${id}/approve`, { method: 'PATCH', body: { commentaireRH } });
+  return res.data;
+}
+
+export async function rejectCongeRequest(id, commentaireRH) {
+  const res = await apiFetch(`/conges/${id}/reject`, { method: 'PATCH', body: { commentaireRH } });
+  return res.data;
+}
+
+export async function getCongeRequestsByEmployee(employeeId) {
+  const res = await apiFetch(`/conges/employee/${employeeId}`);
   return res.data;
 }

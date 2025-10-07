@@ -24,7 +24,7 @@ export default function PayRuns() {
       navigate('/entreprises');
       return;
     }
-    if (user && user.dbName && entreprise) {
+    if (user && entreprise?.dbName) {
       loadPayRuns();
     }
   }, [user, entreprise, navigate]);
@@ -172,6 +172,82 @@ export default function PayRuns() {
           <Calendar className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Aucun cycle de paie</h3>
           <p className="mt-1 text-sm text-gray-500">Générez des bulletins mensuels pour créer des cycles de paie.</p>
+        </div>
+      )}
+
+      {/* Table des rapports mensuels */}
+      {payRuns.length > 0 && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-medium">Rapports de paie mensuels</h3>
+          </div>
+          <div className="p-6">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Période
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Employés
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Paie brute
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Déductions
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Paie nette
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Statut
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {payRuns.slice(0, 10).map((payRun) => {
+                    const payrunPayslips = payRun.payslips || [];
+                    const totalBrut = payrunPayslips.reduce((sum, p) => sum + Number(p.brut || 0), 0);
+                    const totalDeductions = payrunPayslips.reduce((sum, p) => sum + Number(p.deductions || 0), 0);
+                    const totalNet = payrunPayslips.reduce((sum, p) => sum + Number(p.net || 0), 0);
+
+                    return (
+                      <tr key={payRun.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {payRun.periode ? new Date(payRun.periode).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long' }) : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {payrunPayslips.length}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {totalBrut.toLocaleString()} XOF
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {totalDeductions.toLocaleString()} XOF
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                          {totalNet.toLocaleString()} XOF
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
+                            payRun.status === 'CLOTURE' ? 'bg-green-100 text-green-800' :
+                            payRun.status === 'APPROUVE' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {payRun.status === 'CLOTURE' ? 'Clôturé' :
+                             payRun.status === 'APPROUVE' ? 'Approuvé' :
+                             'Brouillon'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

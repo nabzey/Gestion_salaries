@@ -7,7 +7,9 @@ function isAuthenticated() {
 
 export default function ProtectedRoute({ children }) {
   if (!isAuthenticated()) {
-    return <Navigate to="/login" replace />;
+    const currentPath = window.location.pathname;
+    const isEmployeeRoute = currentPath.startsWith('/employee-');
+    return <Navigate to={isEmployeeRoute ? "/employee-login" : "/login"} replace />;
   }
   return children;
 }

@@ -122,7 +122,7 @@ export default function Employees() {
   const [employeePayslips, setEmployeePayslips] = useState([]);
   const [employeeQRCode, setEmployeeQRCode] = useState('');
   const [confirmationCode, setConfirmationCode] = useState('');
-  const [form, setForm] = useState({ nom: '', email: '', poste: '', typeContrat: 'FIXE', tauxSalaire: '', joursTravailles: '', coordonneesBancaires: '', entrepriseId: '' });
+  const [form, setForm] = useState({ nom: '', email: '', password: '', poste: '', typeContrat: 'FIXE', tauxSalaire: '', joursTravailles: '', coordonneesBancaires: '', entrepriseId: '' });
   const [userForm, setUserForm] = useState({ nom: '', email: '', role: 'EMPLOYE' });
   const rateLabel = form.typeContrat === 'FIXE'
     ? 'Salaire mensuel'
@@ -263,6 +263,7 @@ export default function Employees() {
       const payload = {
         nom: form.nom,
         email: form.email,
+        password: form.password || undefined,
         poste: form.poste,
         typeContrat: form.typeContrat,
         tauxSalaire: parseFloat(form.tauxSalaire),
@@ -278,8 +279,11 @@ export default function Employees() {
         payload.entrepriseId = parseInt(form.entrepriseId, 10);
       }
 
-      await createEmployee(payload);
+      const result = await createEmployee(payload);
       setShowAdd(false);
+
+      // Reset form
+      setForm({ nom: '', email: '', password: '', poste: '', typeContrat: 'FIXE', tauxSalaire: '', joursTravailles: '', coordonneesBancaires: '', entrepriseId: '' });
 
       // For super admin, if entrepriseId selected, set the entreprise context
       if (currentUser?.role === 'SUPER_ADMIN' && form.entrepriseId) {
@@ -304,6 +308,8 @@ export default function Employees() {
         raw: e,
       }));
       setEmployees(adapted);
+
+      alert('Employé créé avec succès ! Un email avec les identifiants et le QR code a été envoyé.');
     } catch (err) {
       setError(err.message || 'Erreur lors de la création');
     } finally {
@@ -417,6 +423,10 @@ export default function Employees() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                 <input type="email" className="w-full px-3 py-2 border rounded-lg" value={form.email} onChange={(e)=>setForm({...form, email:e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Mot de passe (optionnel - généré automatiquement si vide)</label>
+                <input type="password" className="w-full px-3 py-2 border rounded-lg" value={form.password} onChange={(e)=>setForm({...form, password:e.target.value})} placeholder="Laissez vide pour génération automatique" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Profession</label>
